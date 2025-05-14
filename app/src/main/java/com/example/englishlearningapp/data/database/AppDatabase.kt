@@ -5,11 +5,21 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.englishlearningapp.data.dao.VocabularyDao
+import com.example.englishlearningapp.data.dao.LearningProgressDao
 import com.example.englishlearningapp.data.entity.Vocabulary
+import com.example.englishlearningapp.data.entity.LearningProgress
 
-@Database(entities = [Vocabulary::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        Vocabulary::class,
+        LearningProgress::class
+    ],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun vocabularyDao(): VocabularyDao
+    abstract fun learningProgressDao(): LearningProgressDao
 
     companion object {
         @Volatile
@@ -21,7 +31,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "vocabulary_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration() // Handle version changes
+                .build()
                 INSTANCE = instance
                 instance
             }

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import com.google.android.libraries.intelligence.acceleration.Analytics
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +40,8 @@ fun VocabularyListScreen(
     viewModel: VocabularyViewModel,
     onNavigateToAdd: () -> Unit,
     onNavigateToEdit: (Vocabulary) -> Unit,
-    onNavigateToPractice: (String?) -> Unit
+    onNavigateToPractice: (String?) -> Unit,
+    onNavigateToStatistics: () -> Unit
 ) {
     val vocabularyList by viewModel.vocabularyList.collectAsState()
     val topics by viewModel.topics.collectAsState()
@@ -49,17 +52,18 @@ fun VocabularyListScreen(
             TopAppBar(
                 title = { Text("Vocabulary List") },
                 actions = {
-                    IconButton(onClick = onNavigateToAdd) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Vocabulary")
+                    IconButton(onClick = onNavigateToStatistics) {
+                        Icon(
+                            imageVector = Icons.Default.BarChart,
+                            contentDescription = "Statistics"
+                        )
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { onNavigateToPractice(selectedTopic) }
-            ) {
-                Text("Practice")
+            FloatingActionButton(onClick = onNavigateToAdd) {
+                Icon(Icons.Default.Add, contentDescription = "Add Vocabulary")
             }
         }
     ) { paddingValues ->
@@ -72,7 +76,7 @@ fun VocabularyListScreen(
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
@@ -89,6 +93,16 @@ fun VocabularyListScreen(
                         label = { Text(topic) }
                     )
                 }
+            }
+
+            // Practice Button
+            Button(
+                onClick = { onNavigateToPractice(selectedTopic) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text("Practice ${selectedTopic ?: "All"} Words")
             }
 
             // Vocabulary List

@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.englishlearningapp.data.entity.Vocabulary
+import com.example.englishlearningapp.ui.viewmodel.LearningProgressViewModel
 
 enum class PracticeMode {
     MULTIPLE_CHOICE,
@@ -27,12 +28,16 @@ enum class PracticeMode {
 @Composable
 fun PracticeScreen(
     vocabularyList: List<Vocabulary>,
+    learningProgressViewModel: LearningProgressViewModel,
     onNavigateBack: () -> Unit
 ) {
     var selectedMode by remember { mutableStateOf<PracticeMode?>(null) }
     var currentIndex by remember { mutableStateOf(0) }
     var score by remember { mutableStateOf(0) }
     var showResults by remember { mutableStateOf(false) }
+
+    // Keep track of learned words to avoid counting duplicates
+    var learnedWords by remember { mutableStateOf(setOf<Long>()) }
 
     Scaffold(
         topBar = {
@@ -62,7 +67,11 @@ fun PracticeScreen(
                 )
                 PracticeMode.values().forEach { mode ->
                     Button(
-                        onClick = { selectedMode = mode },
+                        onClick = { 
+                            selectedMode = mode
+                            // Reset learned words when starting new practice
+                            learnedWords = setOf()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 8.dp)
@@ -77,7 +86,12 @@ fun PracticeScreen(
                         vocabulary = vocabularyList[currentIndex],
                         options = vocabularyList.shuffled().take(4).map { it.meaning },
                         onAnswer = { isCorrect ->
-                            if (isCorrect) score++
+                            learningProgressViewModel.updateProgress(isCorrect)
+                            if (isCorrect && !learnedWords.contains(vocabularyList[currentIndex].id)) {
+                                learningProgressViewModel.incrementWordsLearned()
+                                learnedWords = learnedWords + vocabularyList[currentIndex].id
+                                score++
+                            }
                             if (currentIndex < vocabularyList.size - 1) {
                                 currentIndex++
                             } else {
@@ -88,7 +102,12 @@ fun PracticeScreen(
                     PracticeMode.FILL_IN_BLANK -> FillInBlankPractice(
                         vocabulary = vocabularyList[currentIndex],
                         onAnswer = { isCorrect ->
-                            if (isCorrect) score++
+                            learningProgressViewModel.updateProgress(isCorrect)
+                            if (isCorrect && !learnedWords.contains(vocabularyList[currentIndex].id)) {
+                                learningProgressViewModel.incrementWordsLearned()
+                                learnedWords = learnedWords + vocabularyList[currentIndex].id
+                                score++
+                            }
                             if (currentIndex < vocabularyList.size - 1) {
                                 currentIndex++
                             } else {
@@ -98,16 +117,33 @@ fun PracticeScreen(
                     )
                     PracticeMode.MATCHING -> MatchingPractice(
                         vocabularyList = vocabularyList,
-                        onComplete = { correctMatches ->
+                        onComplete = { correctMatches, matchedWordIds ->
                             score = correctMatches
                             showResults = true
+                            // Update progress for each attempt
+                            repeat(vocabularyList.size) { index ->
+                                learningProgressViewModel.updateProgress(index < correctMatches)
+                            }
+                            // Increment words learned for newly learned words only
+                            matchedWordIds.forEach { wordId ->
+                                if (!learnedWords.contains(wordId)) {
+                                    learningProgressViewModel.incrementWordsLearned()
+                                    learnedWords = learnedWords + wordId
+                                }
+                            }
                         }
                     )
                     PracticeMode.FLASHCARD -> FlashcardPractice(
                         vocabulary = vocabularyList[currentIndex],
                         onNext = {
                             if (currentIndex < vocabularyList.size - 1) {
+                                // Only count as learned if user marks it as known
+                                if (!learnedWords.contains(vocabularyList[currentIndex].id)) {
+                                    learningProgressViewModel.incrementWordsLearned()
+                                    learnedWords = learnedWords + vocabularyList[currentIndex].id
+                                }
                                 currentIndex++
+                                learningProgressViewModel.updateProgress(true)
                             } else {
                                 showResults = true
                             }
@@ -116,6 +152,14 @@ fun PracticeScreen(
                             if (currentIndex > 0) {
                                 currentIndex--
                             }
+                        },
+                        onMarkAsLearned = { isLearned ->
+                            val wordId = vocabularyList[currentIndex].id
+                            if (isLearned && !learnedWords.contains(wordId)) {
+                                learningProgressViewModel.incrementWordsLearned()
+                                learnedWords = learnedWords + wordId
+                            }
+                            learningProgressViewModel.updateProgress(isLearned)
                         }
                     )
                     null -> {}
@@ -132,12 +176,18 @@ fun PracticeScreen(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
+                Text(
+                    text = "Words Learned: ${learnedWords.size}",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
                 Button(
                     onClick = {
                         selectedMode = null
                         currentIndex = 0
                         score = 0
                         showResults = false
+                        learnedWords = setOf()
                     }
                 ) {
                     Text("Try Again")
@@ -222,7 +272,7 @@ fun FillInBlankPractice(
 @Composable
 fun MatchingPractice(
     vocabularyList: List<Vocabulary>,
-    onComplete: (Int) -> Unit
+    onComplete: (Int, Set<Long>) -> Unit
 ) {
     var selectedWord by remember { mutableStateOf<Vocabulary?>(null) }
     var selectedMeaning by remember { mutableStateOf<String?>(null) }
@@ -383,7 +433,7 @@ fun MatchingPractice(
         
         if (matchedPairs.size == currentSessionWords.size) {
             Button(
-                onClick = { onComplete(matchedPairs.size) },
+                onClick = { onComplete(matchedPairs.size, matchedPairs.map { it.first.id }.toSet()) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 16.dp)
@@ -398,7 +448,8 @@ fun MatchingPractice(
 fun FlashcardPractice(
     vocabulary: Vocabulary,
     onNext: () -> Unit,
-    onPrevious: () -> Unit
+    onPrevious: () -> Unit,
+    onMarkAsLearned: (Boolean) -> Unit
 ) {
     var showMeaning by remember { mutableStateOf(false) }
     

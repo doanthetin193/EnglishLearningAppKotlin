@@ -9,39 +9,47 @@ import androidx.navigation.navArgument
 import com.example.englishlearningapp.ui.screens.AddEditVocabularyScreen
 import com.example.englishlearningapp.ui.screens.PracticeScreen
 import com.example.englishlearningapp.ui.screens.VocabularyListScreen
+import com.example.englishlearningapp.ui.screens.StatisticsScreen
 import com.example.englishlearningapp.ui.viewmodel.VocabularyViewModel
+import com.example.englishlearningapp.ui.viewmodel.LearningProgressViewModel
+import com.example.englishlearningapp.data.entity.Vocabulary
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 
 sealed class Screen(val route: String) {
-    object VocabularyList : Screen("vocabulary_list")
-    object AddVocabulary : Screen("add_vocabulary")
-    object EditVocabulary : Screen("edit_vocabulary/{vocabularyId}") {
-        fun createRoute(vocabularyId: Long) = "edit_vocabulary/$vocabularyId"
-    }
-    object Practice : Screen("practice/{topic}") {
-        fun createRoute(topic: String?) = "practice/${topic ?: "all"}"
-    }
+    object VocabularyList : Screen("vocabularyList")
+    object AddVocabulary : Screen("addVocabulary")
+    object EditVocabulary : Screen("editVocabulary/{vocabularyId}")
+    object Practice : Screen("practice/{topic}")
+    object Statistics : Screen("statistics")
 }
 
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    viewModel: VocabularyViewModel
+    vocabularyViewModel: VocabularyViewModel,
+    learningProgressViewModel: LearningProgressViewModel
 ) {
+    val vocabularyList by vocabularyViewModel.vocabularyList.collectAsState()
+
     NavHost(
         navController = navController,
         startDestination = Screen.VocabularyList.route
     ) {
         composable(Screen.VocabularyList.route) {
             VocabularyListScreen(
-                viewModel = viewModel,
+                viewModel = vocabularyViewModel,
                 onNavigateToAdd = {
                     navController.navigate(Screen.AddVocabulary.route)
                 },
                 onNavigateToEdit = { vocabulary ->
-                    navController.navigate(Screen.EditVocabulary.createRoute(vocabulary.id))
+                    navController.navigate("editVocabulary/${vocabulary.id}")
                 },
                 onNavigateToPractice = { topic ->
-                    navController.navigate(Screen.Practice.createRoute(topic))
+                    navController.navigate("practice/${topic ?: "all"}")
+                },
+                onNavigateToStatistics = {
+                    navController.navigate(Screen.Statistics.route)
                 }
             )
         }
@@ -49,7 +57,7 @@ fun AppNavigation(
         composable(Screen.AddVocabulary.route) {
             AddEditVocabularyScreen(
                 onSave = { vocabulary ->
-                    viewModel.addVocabulary(vocabulary)
+                    vocabularyViewModel.addVocabulary(vocabulary)
                     navController.popBackStack()
                 },
                 onNavigateBack = {
@@ -58,20 +66,14 @@ fun AppNavigation(
             )
         }
 
-        composable(
-            route = Screen.EditVocabulary.route,
-            arguments = listOf(
-                navArgument("vocabularyId") {
-                    type = NavType.LongType
-                }
-            )
-        ) { backStackEntry ->
-            val vocabularyId = backStackEntry.arguments?.getLong("vocabularyId") ?: return@composable
-            val vocabulary = viewModel.vocabularyList.value.find { it.id == vocabularyId }
+        composable(Screen.EditVocabulary.route) { backStackEntry ->
+            val vocabularyId = backStackEntry.arguments?.getString("vocabularyId")?.toLongOrNull()
+            val vocabulary = vocabularyList.find { it.id == vocabularyId }
+            
             AddEditVocabularyScreen(
                 vocabulary = vocabulary,
                 onSave = { updatedVocabulary ->
-                    viewModel.updateVocabulary(updatedVocabulary)
+                    vocabularyViewModel.updateVocabulary(updatedVocabulary)
                     navController.popBackStack()
                 },
                 onNavigateBack = {
@@ -80,23 +82,26 @@ fun AppNavigation(
             )
         }
 
-        composable(
-            route = Screen.Practice.route,
-            arguments = listOf(
-                navArgument("topic") {
-                    type = NavType.StringType
-                    defaultValue = "all"
+        composable(Screen.Practice.route) { backStackEntry ->
+            val topic = backStackEntry.arguments?.getString("topic")
+            val filteredList = if (topic == "all") {
+                vocabularyList
+            } else {
+                vocabularyList.filter { it.topic == topic }
+            }
+            
+            PracticeScreen(
+                vocabularyList = filteredList,
+                learningProgressViewModel = learningProgressViewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
-        ) { backStackEntry ->
-            val topic = backStackEntry.arguments?.getString("topic")
-            val vocabularyList = if (topic == "all") {
-                viewModel.vocabularyList.value
-            } else {
-                viewModel.vocabularyList.value.filter { it.topic == topic }
-            }
-            PracticeScreen(
-                vocabularyList = vocabularyList,
+        }
+
+        composable(Screen.Statistics.route) {
+            StatisticsScreen(
+                viewModel = learningProgressViewModel,
                 onNavigateBack = {
                     navController.popBackStack()
                 }
